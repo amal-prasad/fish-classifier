@@ -21,6 +21,20 @@ import time
 import io
 from scipy.io import wavfile
 import sounddevice as sd
+import requests
+
+# Gracefully handle missing dependencies
+try:
+    import sounddevice as sd
+except ImportError:
+    # Create a dummy sounddevice module
+    class DummySD:
+        def __getattr__(self, name):
+            def dummy_function(*args, **kwargs):
+                return None
+            return dummy_function
+    sd = DummySD()
+    print("Warning: sounddevice module not available. Sound features will be disabled.")
 
 # Set page configuration
 st.set_page_config(
@@ -2874,6 +2888,27 @@ def create_conservation_legend():
     # Return empty string since we're using st.markdown directly
     return ""
 
+def download_model_if_needed():
+    """Download the model file if it doesn't exist locally"""
+    model_dir = os.path.join("MLDL", "models")
+    model_path = os.path.join(model_dir, "convnext_model.pkl")
+    
+    # Create the models directory if it doesn't exist
+    os.makedirs(model_dir, exist_ok=True)
+    
+    # Only download if the model doesn't already exist
+    if not os.path.exists(model_path):
+        with st.spinner("Downloading model file (this may take a minute)..."):
+            # For Google Drive:
+            file_id = "1jDXZu65U-kzqxiitMnNklRMMP1VbaaLV"
+            url = f"https://drive.google.com/uc?id={file_id}"                       
+            response = requests.get(url)
+            with open(model_path, "wb") as f:
+                f.write(response.content)
+        st.success("Model downloaded successfully!")
+    
+    return model_path
+
 def main():
     """
     Main function to run the Streamlit application.
@@ -3028,9 +3063,11 @@ def main():
         device = torch.device("cpu")
         st.sidebar.info("Using CPU for inference")
     
-    # Load model and class names
-    with st.spinner("Loading model... This may take a moment."):
-        model, class_names = load_single_model(model_path)
+    # Download the model if needed
+    model_path = download_model_if_needed()
+
+    # Load the model using the downloaded path
+    model, class_names = load_single_model(model_path)
     
     if not model or not class_names:
         st.error("Failed to load model. Please check the model path or upload a model file.")
